@@ -1,0 +1,30 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Passwords vs Passkeys</title>
+<style>body{font:15px system-ui;max-width:900px;margin:2rem auto;padding:0 1rem}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:1rem}@media(max-width:700px){.g{grid-template-columns:1fr}}
+section{border:1px solid #8884;border-radius:8px;padding:1rem}input,button{display:block;width:100%;margin:.4rem 0;padding:.5rem;box-sizing:border-box}
+pre{background:#8882;padding:.5rem;white-space:pre-wrap;min-height:3rem}</style>
+<h1>Passwords vs Passkeys</h1>
+<div class=g>
+<section><h2>System A: Password</h2><input id=au placeholder=username><input id=ap type=password placeholder=password>
+<button onclick="pwReg()">Register</button><button onclick="pwLog()">Login</button></section>
+<section><h2>System B: Passkey (WebAuthn)</h2><input id=bu placeholder=username>
+<button onclick="pkReg()">Create passkey</button><button onclick="pkLog()">Login with passkey</button></section></div>
+<h3>Result</h3><pre id=out></pre>
+<script>
+const b2u=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const u2b=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+const post=async(p,d)=>{const r=await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+ const j=await r.json();if(!r.ok)throw new Error(j.detail);return j};
+const show=async f=>{try{out.textContent=JSON.stringify(await f(),null,2)}catch(e){out.textContent='ERROR: '+e.message}};
+const pwReg=()=>show(()=>post('/pw/register',{user:au.value,password:ap.value}));
+const pwLog=()=>show(()=>post('/pw/login',{user:au.value,password:ap.value}));
+const pkReg=()=>show(async()=>{const u=bu.value,o=await post('/pk/register/options',{user:u});
+ const c=await navigator.credentials.create({publicKey:{...o,challenge:u2b(o.challenge),user:{...o.user,id:u2b(o.user.id)}}});
+ return post('/pk/register/verify',{user:u,clientDataJSON:b2u(c.response.clientDataJSON),attestationObject:b2u(c.response.attestationObject)})});
+const pkLog=()=>show(async()=>{const u=bu.value,o=await post('/pk/login/options',{user:u});
+ const a=await navigator.credentials.get({publicKey:{challenge:u2b(o.challenge),rpId:o.rpId,userVerification:o.userVerification,
+  allowCredentials:o.allowCredentials.map(x=>({...x,id:u2b(x.id)}))}});
+ return post('/pk/login/verify',{user:u,id:b2u(a.rawId),clientDataJSON:b2u(a.response.clientDataJSON),
+  authenticatorData:b2u(a.response.authenticatorData),signature:b2u(a.response.signature)})});
+</script>
